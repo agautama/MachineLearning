@@ -1,0 +1,136 @@
+---
+title: "Machine Learning - Prediction Assignment"
+author: "Amit Gautam"
+date: "July 3, 2016"
+output: html_document
+---
+
+## Executive Summary
+One thing that people regularly do is quantify how much of a particular activity they do, but they rarely quantify how well they do it. In this project, our goal is to use data from accelerometers on the belt, forearm, arm, and dumbell of 6 participants.The goal of the project is then to predict the manner in which the subjects did the exercise.
+
+## Setting up the environment
+```{r, echo=TRUE, warning=FALSE, message=FALSE}
+packages <- c("dplyr","caret","randomForest","ranger")
+if (length(setdiff(packages, rownames(installed.packages()))) > 0) {
+  install.packages(setdiff(packages, rownames(installed.packages())))  
+}
+
+library(caret)
+library(randomForest)
+library(dplyr)
+library(ranger)
+```
+
+## Getting and Partitioning the training dataset
+### Pulling data of the urls
+```{r}
+trainingDataUrl <- "https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv"
+testingDataUrl <- "https://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv"
+```
+
+### Reading the training data and the test data in two different data frames
+```{r}
+trainingData <- read.csv(url(trainingDataUrl), na.strings=c("NA","#DIV/0!",""))
+testingData <- read.csv(url(testingDataUrl), na.strings=c("NA","#DIV/0!",""))
+```
+
+### Partitioning the training data into further training and testing data set
+```{r}
+inTrain <- createDataPartition(y=trainingData$classe, p=0.6, list=FALSE)
+training <- trainingData[inTrain, ]; 
+testing <- trainingData[-inTrain, ]
+```
+
+### check the dimensions of the partitioned training and testing datasets
+```{r}
+dim(training); 
+dim(testing);
+
+```
+
+## Preprocessing the training dataset
+### Identify the non zero variable
+```{r}
+DataNZV <- nearZeroVar(training, saveMetrics=TRUE)
+DataNZV <- DataNZV[DataNZV$nzv == TRUE,]
+DataNZV <- row.names(DataNZV)
+nsv <- names(training) %in% DataNZV
+```
+
+### Eliminate the non-zero variables from the dataset
+```{r}
+training <- training[!nsv]
+```
+
+### Check the dimension of the training dataset and corresponding fields
+```{r}
+str(training)
+training <- training[c(-1)]
+```
+
+### There still seems to be a lots of data fields with lots of missing variable.
+### Lets eliminate the variables that have more than 60% of the data variales as NAs
+```{r}
+training <- training[, colSums(is.na(training))/ nrow(training) < .6]
+```
+
+### Again, lets check the diemnsion of the testing data
+```{r}
+dim(training)
+```
+
+### So we can apply the data preprocession steps to the testing data ad the final test dataset
+```{r}
+clean1 <- colnames(training)
+clean2 <- colnames(training[, -58])
+```
+
+### Lets test dimension of the testing data before and after preprocessing
+### Pre
+```{r}
+dim(testing)
+dim(testingData)
+testing <- testing[clean1]
+testingData <- testingData[clean2]
+dim(testing)
+dim(testingData)
+```
+
+## Developing the model and testing model accuracy
+
+Here we will use ranger implementation of the random forest algorithm. The ranger package tends to be significantly faster(around 5x) and more memory efficient.
+```{r}
+model_rf <- ranger(classe ~ ., 
+                   training, num.trees = 100, 
+                   write.forest = TRUE, 
+                   importance = "impurity")
+```
+### Test the results of the model with the testing data
+```{r}
+pred = predict(model_rf, testing)
+accuracy = mean(pred$predictions == testing$classe)
+results <- confusionMatrix(pred$predictions, testing$classe)
+```
+
+### Results:
+### Out of sample accuracy
+```{r}
+accuracy
+```
+
+### confusion Matrix
+```{r}
+results$table
+
+```
+
+## Running model on test data and finding solution to quiz questions
+```{r}
+predcts <- predict(model_rf, testingData)
+predcts <- predcts$predictions
+```
+
+## Final test data results
+```{r, echo=TRUE, warning=FALSE, message=FALSE}
+predcts
+```
